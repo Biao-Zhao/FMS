@@ -94,6 +94,8 @@ integer :: lnd_mode = 0 !> Land mode: possible values are 0 (uninitialized),
                         !! mode_r4, mode_r8, or ior(mode_r4, mode_r8)
 integer :: ice_mode = 0 !> Ice mode: possible values are 0 (uninitialized),
                         !! mode_r4, mode_r8, or ior(mode_r4, mode_r8)
+integer :: wav_mode = 0 !> Ice mode: possible values are 0 (uninitialized),
+                        !! mode_r4, mode_r8, or ior(mode_r4, mode_r8)
 
 !> @addtogroup data_override_mod
 !> @{
@@ -118,11 +120,12 @@ contains
 !! provide "real" values that will override the default values. Real values can be
 !! specified in either data_table or data_table.yaml. Each line of data_table contains one
 !! data_entry. Items of data_entry are comma-separated.
-subroutine data_override_init(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in, mode)
+subroutine data_override_init(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in, Wave_domain_in, mode)
   type (domain2d), intent(in), optional :: Atm_domain_in !< Atmosphere domain
   type (domain2d), intent(in), optional :: Ocean_domain_in !< Ocean domain
   type (domain2d), intent(in), optional :: Ice_domain_in !< Ice domain
   type (domain2d), intent(in), optional :: Land_domain_in !< Land domain
+  type (domain2d), intent(in), optional :: Wave_domain_in !< Wave domain
   type(domainUG) , intent(in), optional :: Land_domainUG_in !< Land domain, unstructured grid
   integer, intent(in), optional :: mode !< Real precision of initialized domains. Possible values are r4_kind or
                                         !! r8_kind. If omitted, both r4 and r8 modes are initialized.
@@ -142,17 +145,18 @@ subroutine data_override_init(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Lan
   endif
 
   if (iand(mode_flags, mode_r4).ne.0) then
-    call data_override_init_r4(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in)
+    call data_override_init_r4(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in, Wave_domain_in)
   endif
 
   if (iand(mode_flags, mode_r8).ne.0) then
-    call data_override_init_r8(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in)
+    call data_override_init_r8(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in, Wave_domain_in)
   endif
 
   if (present(Atm_domain_in))   atm_mode = ior(atm_mode, mode_flags)
   if (present(Ocean_domain_in)) ocn_mode = ior(ocn_mode, mode_flags)
   if (present(Ice_domain_in))   ice_mode = ior(ice_mode, mode_flags)
   if (present(Land_domain_in))  lnd_mode = ior(lnd_mode, mode_flags)
+  if (present(Wave_domain_in))  lnd_mode = ior(wav_mode, mode_flags)
 end subroutine data_override_init
 
 !> @brief Unset domains that had previously been set for use by data_override.

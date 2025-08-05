@@ -114,17 +114,19 @@ integer            :: nweight_files !< Number of weight files that have been use
 type(fmsExternalWeights_type), allocatable, target :: external_weights(:) !< External weights types
 logical            :: module_is_initialized = .FALSE.
 
-type(domain2D) :: ocn_domain,atm_domain,lnd_domain, ice_domain
+type(domain2D) :: ocn_domain,atm_domain,lnd_domain, ice_domain, wav_domain
 type(domainUG) :: lnd_domainUG
 
 real(FMS_DATA_OVERRIDE_KIND_), dimension(:,:), target, allocatable :: lon_local_ocn, lat_local_ocn
 real(FMS_DATA_OVERRIDE_KIND_), dimension(:,:), target, allocatable :: lon_local_atm, lat_local_atm
 real(FMS_DATA_OVERRIDE_KIND_), dimension(:,:), target, allocatable :: lon_local_ice, lat_local_ice
 real(FMS_DATA_OVERRIDE_KIND_), dimension(:,:), target, allocatable :: lon_local_lnd, lat_local_lnd
+real(FMS_DATA_OVERRIDE_KIND_), dimension(:,:), target, allocatable :: lon_local_wav, lat_local_wav
 real(FMS_DATA_OVERRIDE_KIND_) :: min_glo_lon_ocn, max_glo_lon_ocn
 real(FMS_DATA_OVERRIDE_KIND_) :: min_glo_lon_atm, max_glo_lon_atm
 real(FMS_DATA_OVERRIDE_KIND_) :: min_glo_lon_lnd, max_glo_lon_lnd
 real(FMS_DATA_OVERRIDE_KIND_) :: min_glo_lon_ice, max_glo_lon_ice
+real(FMS_DATA_OVERRIDE_KIND_) :: min_glo_lon_wav, max_glo_lon_wav
 integer :: num_fields = 0 !< number of fields in override_array already processed
 
 type(data_type), dimension(:), allocatable :: data_table !< user-provided data table
@@ -165,16 +167,17 @@ contains
 !! that will override the default values. Real values can be specified in either data_table
 !! or data_table.yaml. Each line of data_table contains one data_entry. Items of data_entry
 !! are comma-separated.
-subroutine DATA_OVERRIDE_INIT_IMPL_(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in)
+subroutine DATA_OVERRIDE_INIT_IMPL_(Atm_domain_in, Ocean_domain_in, Ice_domain_in, Land_domain_in, Land_domainUG_in, Wave_domain_in)
   type (domain2d), intent(in), optional :: Atm_domain_in    !> Atmosphere domain
   type (domain2d), intent(in), optional :: Ocean_domain_in  !> Ocean domain
   type (domain2d), intent(in), optional :: Ice_domain_in    !> Ice domain
   type (domain2d), intent(in), optional :: Land_domain_in   !> Land domain
+  type (domain2d), intent(in), optional :: Wave_domain_in   !> Wave domain
   type(domainUG) , intent(in), optional :: Land_domainUG_in !> Land domain, unstructured grid
 
   character(len=18), parameter    :: grid_file = 'INPUT/grid_spec.nc'
   integer               :: i, iunit, io_status, ierr, use_get_grid_version
-  logical               :: atm_on, ocn_on, lnd_on, ice_on, lndUG_on
+  logical               :: atm_on, ocn_on, lnd_on, ice_on, lndUG_on, wav_on
   logical               :: file_open
   type(FmsNetcdfFile_t) :: fileobj
 
@@ -202,18 +205,21 @@ end if
   ocn_on = PRESENT(Ocean_domain_in)
   lnd_on = PRESENT(Land_domain_in)
   ice_on = PRESENT(Ice_domain_in)
+  wav_on = PRESENT(Wave_domain_in)
   lndUG_on = PRESENT(Land_domainUG_in)
   if(.not. module_is_initialized) then
     atm_domain = NULL_DOMAIN2D
     ocn_domain = NULL_DOMAIN2D
     lnd_domain = NULL_DOMAIN2D
     ice_domain = NULL_DOMAIN2D
+    wav_domain = NULL_DOMAIN2D
     lnd_domainUG = NULL_DOMAINUG
   end if
   if (atm_on) atm_domain = Atm_domain_in
   if (ocn_on) ocn_domain = Ocean_domain_in
   if (lnd_on) lnd_domain = Land_domain_in
   if (ice_on) ice_domain = Ice_domain_in
+  if (wav_on) wav_domain = Wave_domain_in
   if (lndUG_on) lnd_domainUG = Land_domainUG_in
 
   if(.not. module_is_initialized) then
@@ -277,7 +283,7 @@ end if
 
  module_is_initialized = .TRUE.
 
- if ( .NOT. (atm_on .or. ocn_on .or. lnd_on .or. ice_on .or. lndUG_on)) return
+ if ( .NOT. (atm_on .or. ocn_on .or. lnd_on .or. ice_on .or. lndUG_on .or. wav_on)) return
  if (table_size .eq. 0) then
     call mpp_error(NOTE, "data_table is empty, not doing any data_overrides")
     return
@@ -298,8 +304,8 @@ end if
  else if(variable_exists(fileobj, "ocn_mosaic_file" ) .OR. variable_exists(fileobj, "gridfiles" ) ) then
    use_get_grid_version = 2
    if(variable_exists(fileobj, "gridfiles" ) ) then
-     if(count_ne_1((ocn_on .OR. ice_on), lnd_on, atm_on)) call mpp_error(FATAL, 'data_override_mod: the grid file ' //&
-          'is a solo mosaic, one and only one of atm_on, lnd_on or ice_on/ocn_on should be true')
+     if(count_ne_1((ocn_on .OR. ice_on), lnd_on, atm_on, wav_on)) call mpp_error(FATAL, 'data_override_mod: the grid file ' //&
+          'is a solo mosaic, one and only one of atm_on, lnd_on, wav_on or ice_on/ocn_on should be true')
    end if
  else
    call mpp_error(FATAL, 'data_override_mod: none of x_T, geolon_t, ocn_mosaic_file or gridfiles exist in '// &
@@ -325,6 +331,12 @@ end if
        call get_grid_version_1(grid_file, 'ice', ice_domain, lon_local_ice, lat_local_ice, &
           min_glo_lon_ice, max_glo_lon_ice )
     endif
+    
+    if (wav_on .and. .not. allocated(lon_local_wav) ) then
+       call get_grid_version_1(grid_file, 'wav', wav_domain, lon_local_wav, lat_local_wav, &
+          min_glo_lon_wav, max_glo_lon_wav )
+    endif
+
  else
    if (atm_on .and. .not. allocated(lon_local_atm) ) then
        call get_grid_version_2(fileobj, 'atm', atm_domain, lon_local_atm, lat_local_atm, &
@@ -345,6 +357,12 @@ end if
        call get_grid_version_2(fileobj, 'ocn', ice_domain, lon_local_ice, lat_local_ice, &
                                min_glo_lon_ice, max_glo_lon_ice, use_center_grid_points)
    endif
+
+   if (wav_on .and. .not. allocated(lon_local_wav) ) then
+       call get_grid_version_2(fileobj, 'wav', wav_domain, lon_local_wav, lat_local_wav, &
+                               min_glo_lon_wav, max_glo_lon_wav)
+   endif
+
  end if
  if(use_get_grid_version .EQ. 2) then
    call close_file(fileobj)
@@ -363,13 +381,16 @@ end subroutine DATA_OVERRIDE_INIT_IMPL_
 !! .false.  .true.   .false. | .false. !!
 !! .false.  .false.  .true.  | .false. !!
 !! .false.  .false.  .false. | .true.  !!
-function count_ne_1(in_1, in_2, in_3)
+function count_ne_1(in_1, in_2, in_3, in_4)
   logical, intent(in)  :: in_1 !< Argument 1
   logical, intent(in)  :: in_2 !< Argument 2
   logical, intent(in)  :: in_3 !< Argument 3
+  logical, intent(in)  :: in_4 !< Argument 4
   logical :: count_ne_1
-
-  count_ne_1 = .not.(in_1.NEQV.in_2.NEQV.in_3) .OR. (in_1.AND.in_2.AND.in_3)
+  integer :: count_true
+  ! count_ne_1 = .not.(in_1.NEQV.in_2.NEQV.in_3) .OR. (in_1.AND.in_2.AND.in_3) ! the original function does not work for 4 variables (Cheng Zhang)
+  count_true = merge(1, 0, in_1) + merge(1, 0, in_2) + merge(1, 0, in_3) + merge(1, 0, in_4)
+  count_ne_1 = (count_true /= 1)
 end function count_ne_1
 
 subroutine read_table(data_table)
@@ -802,6 +823,8 @@ subroutine get_domain(gridname, domain, comp_domain)
         domain = lnd_domain
      case('ICE')
         domain = ice_domain
+     case('WAV')
+        domain = wav_domain
      case default
         call mpp_error(FATAL,'error in data_override get_domain')
   end select
@@ -1329,6 +1352,8 @@ subroutine DATA_OVERRIDE_3D_(gridname,fieldname_code,return_data,time,override,d
            lon_local => lon_local_atm; lat_local => lat_local_atm
         case('LND')
            lon_local => lon_local_lnd; lat_local => lat_local_lnd
+	case('WAV')
+           lon_local => lon_local_wav; lat_local => lat_local_wav
         case default
            call mpp_error(FATAL,'error: gridname not recognized in data_override')
         end select
@@ -1474,6 +1499,8 @@ subroutine DATA_OVERRIDE_3D_(gridname,fieldname_code,return_data,time,override,d
         lon_local => lon_local_atm; lat_local => lat_local_atm
      case('LND')
         lon_local => lon_local_lnd; lat_local => lat_local_lnd
+     case('WAV')
+        lon_local => lon_local_wav; lat_local => lat_local_wav
      case default
         call mpp_error(FATAL,'error: gridname not recognized in data_override')
      end select

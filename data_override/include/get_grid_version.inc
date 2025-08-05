@@ -101,11 +101,13 @@ subroutine GET_GRID_VERSION_1_(grid_file, mod_name, domain, lon, lat, min_lon, m
     endif
     deallocate(lon_vert)
     deallocate(lat_vert)
-  case('atm', 'lnd')
+  case('atm', 'lnd','wav')
      if(trim(mod_name) == 'atm') then
         xname = 'xta'; yname = 'yta'
-     else
+     elseif (trim(mod_name) == 'lnd') then
         xname = 'xtl'; yname = 'ytl'
+     elseif (trim(mod_name) == 'wav') then
+        xname = 'xtw'; yname = 'ytw'
      endif
      ndims = get_variable_num_dimensions(fileobj, xname)
      call get_variable_size(fileobj, xname, siz(1:ndims))
@@ -129,7 +131,7 @@ subroutine GET_GRID_VERSION_1_(grid_file, mod_name, domain, lon, lat, min_lon, m
      deallocate(glon)
      deallocate(glat)
   case default
-     call mpp_error(FATAL, "data_override_mod: mod_name should be 'atm', 'ocn', 'ice' or 'lnd' ")
+     call mpp_error(FATAL, "data_override_mod: mod_name should be 'atm', 'ocn', 'wav','ice' or 'lnd' ")
   end select
 
   call close_file(fileobj)
@@ -175,8 +177,8 @@ subroutine GET_GRID_VERSION_2_(fileobj, mod_name, domain, lon, lat, min_lon, max
   if (present(use_center_grid_points)) use_center_grid_points_local = use_center_grid_points
 
   if(trim(mod_name) .NE. 'atm' .AND. trim(mod_name) .NE. 'ocn' .AND. &
-     trim(mod_name) .NE. 'ice' .AND. trim(mod_name) .NE. 'lnd' ) call mpp_error(FATAL, &
-        "data_override_mod: mod_name should be 'atm', 'ocn', 'ice' or 'lnd' ")
+     trim(mod_name) .NE. 'ice' .AND. trim(mod_name) .NE. 'lnd' .AND. trim(mod_name) .NE. 'wav') call mpp_error(FATAL, &
+        "data_override_mod: mod_name should be 'atm', 'ocn', 'wav','ice' or 'lnd' ")
 
   call mpp_get_compute_domain(domain, isc, iec, jsc, jec)
 
